@@ -621,13 +621,15 @@ pub(crate) fn action_delegate_action(
     signed_delegate_action: &SignedDelegateAction,
     result: &mut ActionResult,
 ) -> Result<(), RuntimeError> {
-    match signed_delegate_action.get_delegate_action() {
-        Ok(delegate_action) => {
+    match signed_delegate_action.delegate_action.get_actions() {
+        Ok(actions) => {
+            let delegate_action = &signed_delegate_action.delegate_action;
             let new_receipt = Receipt::new_delegate_actions(
                 &action_receipt.signer_id,
                 predecessor_id,
-                &delegate_action,
-                &signed_delegate_action.public_key,
+                &delegate_action.receiver_id,
+                &actions,
+                &delegate_action.public_key,
                 action_receipt.gas_price,
             );
 
@@ -635,18 +637,18 @@ pub(crate) fn action_delegate_action(
                 apply_state.config.transaction_costs.action_receipt_creation_config.exec_fee(),
                 total_prepaid_exec_fees(
                     &apply_state.config.transaction_costs,
-                    &delegate_action.actions,
+                    &actions,
                     &delegate_action.receiver_id,
                     apply_state.current_protocol_version,
                 )?,
             )?;
-            required_gas = safe_add_gas(required_gas, total_prepaid_gas(&delegate_action.actions)?)?;
+            required_gas = safe_add_gas(required_gas, total_prepaid_gas(&actions)?)?;
 
             result.gas_used += required_gas;
             result.new_receipts.push(new_receipt);
 
-            let required_deposit = total_deposit(&delegate_action.actions)?;
-            if let Some(refund_deposit) = delegate_action.deposit.checked_sub(required_deposit) {
+            let required_deposit = total_deposit(&actions)?;
+            if let Some(refund_deposit) = signed_delegate_action.deposit.checked_sub(required_deposit) {
                 if refund_deposit > 0 {
                     let refund_receipt = Receipt::new_balance_refund(&receipt.predecessor_id, refund_deposit);
                     result.new_receipts.push(refund_receipt);

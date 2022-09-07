@@ -358,19 +358,20 @@ fn verify_delegate_action(
                 // There should be only one DelegateAction
                 found_delegate_action = true;
 
-                let hash = signed_delegate_action.get_hash();
-                let public_key = &signed_delegate_action.public_key;
+                let delegate_action = &signed_delegate_action.delegate_action;
+                let hash = delegate_action.get_hash();
+                let public_key = &delegate_action.public_key;
                 if !signed_delegate_action.signature.verify(hash.as_ref(), public_key) {
                     return Err(InvalidTxError::InvalidSignature)
                         .map_err(RuntimeError::InvalidTxError);
                 }
 
-                let delegate_action = signed_delegate_action.get_delegate_action().unwrap();
-                validate_actions(limit_config, &delegate_action.actions)
+                let actions = delegate_action.get_actions().unwrap();
+                validate_actions(limit_config, &actions)
                     .map_err(InvalidTxError::ActionsValidation)?;
 
                 // DelegateAction shouldn't contain a nested DelegateAction
-                if delegate_action.actions.iter().any(|a| matches!(a, Action::Delegate(_))) {
+                if actions.iter().any(|a| matches!(a, Action::Delegate(_))) {
                     return Err(ActionsValidationError::TotalNumberOfActionsExceeded {
                         total_number_of_actions: transaction.actions.len() as u64,
                         limit: 0,
@@ -382,7 +383,7 @@ fn verify_delegate_action(
                 validate_access_key(
                     state_update,
                     &transaction.receiver_id,
-                    &signed_delegate_action.public_key,
+                    &delegate_action.public_key,
                     delegate_action.nonce,
                     block_height,
                     current_protocol_version,

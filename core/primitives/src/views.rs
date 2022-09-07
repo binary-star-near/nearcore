@@ -35,7 +35,7 @@ use crate::transaction::{
     Action, AddKeyAction, CreateAccountAction, DeleteAccountAction, DeleteKeyAction,
     DeployContractAction, ExecutionMetadata, ExecutionOutcome, ExecutionOutcomeWithIdAndProof,
     ExecutionStatus, FunctionCallAction, SignedDelegateAction, SignedTransaction, StakeAction,
-    TransferAction,
+    TransferAction, DelegateAction,
 };
 use crate::types::{
     AccountId, AccountWithPublicKey, Balance, BlockHeight, CompiledContractCache, EpochHeight,
@@ -956,9 +956,11 @@ pub enum ActionView {
         beneficiary_id: AccountId,
     },
     Delegate {
-        delegate_action_serde: Vec<u8>,
+        #[serde(with = "dec_format")]
+        deposit: Balance,
+        gas: Gas,
+        delegate_action: DelegateAction,
         signature: Signature,
-        public_key: PublicKey,
     },
 }
 
@@ -989,9 +991,10 @@ impl From<Action> for ActionView {
                 ActionView::DeleteAccount { beneficiary_id: action.beneficiary_id }
             }
             Action::Delegate(action) => ActionView::Delegate {
-                delegate_action_serde: action.delegate_action_serde,
+                deposit: action.deposit,
+                gas: action.gas,
+                delegate_action: action.delegate_action,
                 signature: action.signature,
-                public_key: action.public_key,
             },
         }
     }
@@ -1023,13 +1026,15 @@ impl TryFrom<ActionView> for Action {
                 Action::DeleteAccount(DeleteAccountAction { beneficiary_id })
             }
             ActionView::Delegate {
-                delegate_action_serde: delegate_action,
+                deposit,
+                gas,
+                delegate_action,
                 signature,
-                public_key,
             } => Action::Delegate(SignedDelegateAction {
-                delegate_action_serde: delegate_action,
+                deposit,
+                gas,
+                delegate_action: delegate_action,
                 signature,
-                public_key,
             }),
         })
     }

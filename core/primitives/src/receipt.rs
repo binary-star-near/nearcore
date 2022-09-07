@@ -10,7 +10,7 @@ use crate::borsh::maybestd::collections::HashMap;
 use crate::hash::CryptoHash;
 use crate::logging;
 use crate::serialize::{dec_format, option_base64_format};
-use crate::transaction::{Action, DelegateAction, TransferAction};
+use crate::transaction::{Action, TransferAction};
 use crate::types::{AccountId, Balance, ShardId};
 
 /// Receipts are used for a cross-shard communication.
@@ -91,13 +91,14 @@ impl Receipt {
     pub fn new_delegate_actions(
         signer_id: &AccountId,
         predecessor_id: &AccountId,
-        delegate_action: &DelegateAction,
+        receiver_id: &AccountId,
+        actions: &Vec<Action>,
         public_key: &PublicKey,
         gas_price: Balance,
     ) -> Self {
         Receipt {
             predecessor_id: predecessor_id.clone(),
-            receiver_id: delegate_action.receiver_id.clone(),
+            receiver_id: receiver_id.clone(),
             receipt_id: CryptoHash::default(),
 
             receipt: ReceiptEnum::Action(ActionReceipt {
@@ -106,7 +107,7 @@ impl Receipt {
                 gas_price: gas_price,
                 output_data_receivers: vec![],
                 input_data_ids: vec![],
-                actions: delegate_action.actions.clone(),
+                actions: actions.clone(),
             }),
         }
     }
