@@ -35,7 +35,7 @@ fn get_delayed_receipts(
 }
 
 /// Calculates and returns cost of a receipt.
-pub(crate) fn receipt_cost(
+fn receipt_cost(
     transaction_costs: &RuntimeFeesConfig,
     current_protocol_version: ProtocolVersion,
     receipt: &Receipt,

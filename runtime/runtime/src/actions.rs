@@ -30,8 +30,7 @@ use near_vm_errors::{
 use near_vm_logic::types::PromiseResult;
 use near_vm_logic::VMContext;
 
-use crate::balance_checker::receipt_cost;
-use crate::config::{safe_add_gas, RuntimeConfig};
+use crate::config::{safe_add_gas, RuntimeConfig, total_prepaid_exec_fees, total_prepaid_gas, total_deposit};
 use crate::ext::{ExternalError, RuntimeExt};
 use crate::{ActionResult, ApplyState};
 use near_primitives::config::ViewConfig;
@@ -616,6 +615,7 @@ pub(crate) fn action_add_key(
 
 pub(crate) fn action_delegate_action(
     apply_state: &ApplyState,
+    receipt: &Receipt,
     action_receipt: &ActionReceipt,
     predecessor_id: &AccountId,
     signed_delegate_action: &SignedDelegateAction,
@@ -631,21 +631,28 @@ pub(crate) fn action_delegate_action(
                 action_receipt.gas_price,
             );
 
-            let transaction_costs = &apply_state.config.transaction_costs;
-            let current_protocol_version = apply_state.current_protocol_version;
-            let cost = receipt_cost(transaction_costs, current_protocol_version, &new_receipt)?;
+            let mut required_gas = safe_add_gas(
+                apply_state.config.transaction_costs.action_receipt_creation_config.exec_fee(),
+                total_prepaid_exec_fees(
+                    &apply_state.config.transaction_costs,
+                    &delegate_action.actions,
+                    &delegate_action.receiver_id,
+                    apply_state.current_protocol_version,
+                )?,
+            )?;
+            required_gas = safe_add_gas(required_gas, total_prepaid_gas(&delegate_action.actions)?)?;
 
-            if let Some(refund) = delegate_action.deposit.checked_sub(cost.clone()) {
-                let refund_receipt = Receipt::new_balance_refund(&action_receipt.signer_id, refund);
+            result.gas_used += required_gas;
+            result.new_receipts.push(new_receipt);
 
-                result.new_receipts.push(new_receipt);
-                result.new_receipts.push(refund_receipt);
-            } else {
-                result.result = Err(ActionErrorKind::LackBalanceForState {
-                    account_id: action_receipt.signer_id.clone(),
-                    amount: cost.clone(),
+            let required_deposit = total_deposit(&delegate_action.actions)?;
+            if let Some(refund_deposit) = delegate_action.deposit.checked_sub(required_deposit) {
+                if refund_deposit > 0 {
+                    let refund_receipt = Receipt::new_balance_refund(&receipt.predecessor_id, refund_deposit);
+                    result.new_receipts.push(refund_receipt);
                 }
-                .into());
+            } else {
+                todo!();
             }
         }
         Err(_) => todo!(),

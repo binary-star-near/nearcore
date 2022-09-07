@@ -97,7 +97,7 @@ impl Receipt {
     ) -> Self {
         Receipt {
             predecessor_id: predecessor_id.clone(),
-            receiver_id: delegate_action.reciever_id.clone(),
+            receiver_id: delegate_action.receiver_id.clone(),
             receipt_id: CryptoHash::default(),
 
             receipt: ReceiptEnum::Action(ActionReceipt {

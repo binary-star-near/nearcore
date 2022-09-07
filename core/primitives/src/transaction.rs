@@ -78,6 +78,10 @@ impl Action {
     pub fn get_prepaid_gas(&self) -> Gas {
         match self {
             Action::FunctionCall(a) => a.gas,
+            Action::Delegate(a) => {
+                let delegate_action = a.get_delegate_action().unwrap();
+                delegate_action.gas
+            },
             _ => 0,
         }
     }
@@ -229,8 +233,9 @@ impl From<DeleteAccountAction> for Action {
 #[cfg_attr(feature = "deepsize_feature", derive(deepsize::DeepSizeOf))]
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct DelegateAction {
-    pub reciever_id: AccountId,
+    pub receiver_id: AccountId,
     pub deposit: Balance,
+    pub gas: Gas,
     pub nonce: u64,
     pub actions: Vec<Action>,
 }

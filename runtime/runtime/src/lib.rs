@@ -445,6 +445,7 @@ impl Runtime {
             Action::Delegate(signed_delegate_action) => {
                 action_delegate_action(
                     apply_state,
+                    &receipt,
                     action_receipt,
                     account_id,
                     signed_delegate_action,
