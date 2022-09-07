@@ -422,7 +422,6 @@ mod tests {
             receipt_id: Default::default(),
             receipt: ReceiptEnum::Action(ActionReceipt {
                 signer_id: tx.transaction.signer_id.clone(),
-                relayer_id: None,
                 signer_public_key: tx.transaction.public_key.clone(),
                 gas_price,
                 output_data_receivers: vec![],
@@ -478,7 +477,6 @@ mod tests {
             receipt_id: Default::default(),
             receipt: ReceiptEnum::Action(ActionReceipt {
                 signer_id: tx.transaction.signer_id.clone(),
-                relayer_id: None,
                 signer_public_key: tx.transaction.public_key.clone(),
                 gas_price,
                 output_data_receivers: vec![],

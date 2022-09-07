@@ -52,7 +52,6 @@ impl Receipt {
 
             receipt: ReceiptEnum::Action(ActionReceipt {
                 signer_id: "system".parse().unwrap(),
-                relayer_id: None,
                 signer_public_key: PublicKey::empty(KeyType::ED25519),
                 gas_price: 0,
                 output_data_receivers: vec![],
@@ -80,7 +79,6 @@ impl Receipt {
 
             receipt: ReceiptEnum::Action(ActionReceipt {
                 signer_id: receiver_id.clone(),
-                relayer_id: None,
                 signer_public_key,
                 gas_price: 0,
                 output_data_receivers: vec![],
@@ -91,7 +89,7 @@ impl Receipt {
     }
 
     pub fn new_delegate_actions(
-        relayer_id: &AccountId,
+        signer_id: &AccountId,
         predecessor_id: &AccountId,
         delegate_action: &DelegateAction,
         public_key: &PublicKey,
@@ -103,8 +101,7 @@ impl Receipt {
             receipt_id: CryptoHash::default(),
 
             receipt: ReceiptEnum::Action(ActionReceipt {
-                signer_id: predecessor_id.clone(),
-                relayer_id: Some(relayer_id.clone()),
+                signer_id: signer_id.clone(),
                 signer_public_key: public_key.clone(),
                 gas_price: gas_price,
                 output_data_receivers: vec![],
@@ -129,8 +126,6 @@ pub enum ReceiptEnum {
 pub struct ActionReceipt {
     /// A signer of the original transaction
     pub signer_id: AccountId,
-    /// A relayer's identifier in case of a delgated action
-    pub relayer_id: Option<AccountId>,
     /// An access key which was used to sign the original transaction
     pub signer_public_key: PublicKey,
     /// A gas_price which has been used to buy gas in the original transaction

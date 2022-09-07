@@ -1319,7 +1319,6 @@ mod tests {
                 &limit_config,
                 &ActionReceipt {
                     signer_id: alice_account(),
-                    relayer_id: None,
                     signer_public_key: PublicKey::empty(KeyType::ED25519),
                     gas_price: 100,
                     output_data_receivers: vec![],
