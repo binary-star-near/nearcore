@@ -231,17 +231,21 @@ impl From<DeleteAccountAction> for Action {
 #[cfg_attr(feature = "deepsize_feature", derive(deepsize::DeepSizeOf))]
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct ActionArraySerde {
+    /// A list of actions to be applied
     actions: Vec<Action>,
 }
 
 #[cfg_attr(feature = "deepsize_feature", derive(deepsize::DeepSizeOf))]
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct DelegateAction {
+    /// Receiver account for the actions
     pub receiver_id: AccountId,
     pub nonce: u64,
     // This is a workaround to avoid a type recursion. 'actions[Action]' is deserialized in runtime.
-    // This field contains ActionArraySerde structure.
+    // This field contains serialized ActionArraySerde structure.
     pub action_array_serde: Vec<u8>,
+    /// A public key of the access key which was used to DelegateAction.
+    /// Access key holds permissions for calling certain kinds of actions.
     pub public_key: PublicKey,
 }
 #[cfg_attr(feature = "deepsize_feature", derive(deepsize::DeepSizeOf))]

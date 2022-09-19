@@ -613,7 +613,7 @@ pub(crate) fn action_add_key(
     Ok(())
 }
 
-pub(crate) fn action_delegate_action(
+pub(crate) fn apply_delegate_action(
     apply_state: &ApplyState,
     receipt: &Receipt,
     action_receipt: &ActionReceipt,
