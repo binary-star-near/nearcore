@@ -78,9 +78,7 @@ impl Action {
     pub fn get_prepaid_gas(&self) -> Gas {
         match self {
             Action::FunctionCall(a) => a.gas,
-            Action::Delegate(a) => {
-                a.gas
-            },
+            Action::Delegate(a) => a.gas,
             _ => 0,
         }
     }
@@ -88,9 +86,7 @@ impl Action {
         match self {
             Action::FunctionCall(a) => a.deposit,
             Action::Transfer(a) => a.deposit,
-            Action::Delegate(a) => {
-                a.deposit
-            }
+            Action::Delegate(a) => a.deposit,
             _ => 0,
         }
     }

@@ -804,7 +804,9 @@ impl Runtime {
         }
 
         if deposit_refund > 0 {
-            result.new_receipts.push(Receipt::new_balance_refund(&receipt.predecessor_id, deposit_refund));
+            result
+                .new_receipts
+                .push(Receipt::new_balance_refund(&receipt.predecessor_id, deposit_refund));
         }
         if gas_balance_refund > 0 {
             // Gas refunds refund the allowance of the access key, so if the key exists on the

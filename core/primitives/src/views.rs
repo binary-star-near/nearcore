@@ -32,10 +32,10 @@ use crate::sharding::{
     ShardChunkHeaderV3,
 };
 use crate::transaction::{
-    Action, AddKeyAction, CreateAccountAction, DeleteAccountAction, DeleteKeyAction,
-    DeployContractAction, ExecutionMetadata, ExecutionOutcome, ExecutionOutcomeWithIdAndProof,
-    ExecutionStatus, FunctionCallAction, SignedDelegateAction, SignedTransaction, StakeAction,
-    TransferAction, DelegateAction,
+    Action, AddKeyAction, CreateAccountAction, DelegateAction, DeleteAccountAction,
+    DeleteKeyAction, DeployContractAction, ExecutionMetadata, ExecutionOutcome,
+    ExecutionOutcomeWithIdAndProof, ExecutionStatus, FunctionCallAction, SignedDelegateAction,
+    SignedTransaction, StakeAction, TransferAction,
 };
 use crate::types::{
     AccountId, AccountWithPublicKey, Balance, BlockHeight, CompiledContractCache, EpochHeight,
@@ -1025,17 +1025,14 @@ impl TryFrom<ActionView> for Action {
             ActionView::DeleteAccount { beneficiary_id } => {
                 Action::DeleteAccount(DeleteAccountAction { beneficiary_id })
             }
-            ActionView::Delegate {
-                deposit,
-                gas,
-                delegate_action,
-                signature,
-            } => Action::Delegate(SignedDelegateAction {
-                deposit,
-                gas,
-                delegate_action: delegate_action,
-                signature,
-            }),
+            ActionView::Delegate { deposit, gas, delegate_action, signature } => {
+                Action::Delegate(SignedDelegateAction {
+                    deposit,
+                    gas,
+                    delegate_action: delegate_action,
+                    signature,
+                })
+            }
         })
     }
 }

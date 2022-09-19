@@ -14,7 +14,7 @@ use near_primitives::transaction::{
     FunctionCallAction, SignedDelegateAction, StakeAction, TransferAction,
 };
 use near_primitives::types::validator_stake::ValidatorStake;
-use near_primitives::types::{AccountId, BlockHeight, EpochInfoProvider, TrieCacheMode};
+use near_primitives::types::{AccountId, BlockHeight, EpochInfoProvider, Gas, TrieCacheMode};
 use near_primitives::utils::create_random_seed;
 use near_primitives::version::{
     is_implicit_account_creation_enabled, ProtocolFeature, ProtocolVersion,
@@ -30,7 +30,9 @@ use near_vm_errors::{
 use near_vm_logic::types::PromiseResult;
 use near_vm_logic::VMContext;
 
-use crate::config::{safe_add_gas, RuntimeConfig, total_prepaid_exec_fees, total_prepaid_gas, total_deposit};
+use crate::config::{
+    safe_add_gas, total_deposit, total_prepaid_exec_fees, total_prepaid_gas, RuntimeConfig,
+};
 use crate::ext::{ExternalError, RuntimeExt};
 use crate::{ActionResult, ApplyState};
 use near_primitives::config::ViewConfig;
@@ -633,24 +635,18 @@ pub(crate) fn apply_delegate_action(
                 action_receipt.gas_price,
             );
 
-            let mut required_gas = safe_add_gas(
-                apply_state.config.transaction_costs.action_receipt_creation_config.exec_fee(),
-                total_prepaid_exec_fees(
-                    &apply_state.config.transaction_costs,
-                    &actions,
-                    &delegate_action.receiver_id,
-                    apply_state.current_protocol_version,
-                )?,
-            )?;
-            required_gas = safe_add_gas(required_gas, total_prepaid_gas(&actions)?)?;
+            let required_gas = receipt_required_gas(apply_state, &new_receipt)?;
 
             result.gas_used += required_gas;
             result.new_receipts.push(new_receipt);
 
-            let required_deposit = total_deposit(&actions)?;
-            if let Some(refund_deposit) = signed_delegate_action.deposit.checked_sub(required_deposit) {
+            let required_deposit = receipt_required_deposit(&receipt)?;
+            if let Some(refund_deposit) =
+                signed_delegate_action.deposit.checked_sub(required_deposit)
+            {
                 if refund_deposit > 0 {
-                    let refund_receipt = Receipt::new_balance_refund(&receipt.predecessor_id, refund_deposit);
+                    let refund_receipt =
+                        Receipt::new_balance_refund(&receipt.predecessor_id, refund_deposit);
                     result.new_receipts.push(refund_receipt);
                 }
             } else {
@@ -661,6 +657,32 @@ pub(crate) fn apply_delegate_action(
     }
 
     Ok(())
+}
+
+fn receipt_required_gas(apply_state: &ApplyState, receipt: &Receipt) -> Result<Gas, RuntimeError> {
+    Ok(match &receipt.receipt {
+        ReceiptEnum::Action(action_receipt) => {
+            let mut required_gas = safe_add_gas(
+                apply_state.config.transaction_costs.action_receipt_creation_config.exec_fee(),
+                total_prepaid_exec_fees(
+                    &apply_state.config.transaction_costs,
+                    &action_receipt.actions,
+                    &receipt.receiver_id,
+                    apply_state.current_protocol_version,
+                )?,
+            )?;
+            required_gas = safe_add_gas(required_gas, total_prepaid_gas(&action_receipt.actions)?)?;
+            required_gas
+        }
+        ReceiptEnum::Data(_) => 0,
+    })
+}
+
+fn receipt_required_deposit(receipt: &Receipt) -> Result<u128, RuntimeError> {
+    Ok(match &receipt.receipt {
+        ReceiptEnum::Action(action_receipt) => total_deposit(&action_receipt.actions)?,
+        ReceiptEnum::Data(_) => 0,
+    })
 }
 
 pub(crate) fn check_actor_permissions(
