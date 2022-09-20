@@ -14,7 +14,9 @@ use near_primitives::transaction::{
     FunctionCallAction, SignedDelegateAction, StakeAction, TransferAction,
 };
 use near_primitives::types::validator_stake::ValidatorStake;
-use near_primitives::types::{AccountId, BlockHeight, EpochInfoProvider, Gas, TrieCacheMode};
+use near_primitives::types::{
+    AccountId, Balance, BlockHeight, EpochInfoProvider, Gas, TrieCacheMode,
+};
 use near_primitives::utils::create_random_seed;
 use near_primitives::version::{
     is_implicit_account_creation_enabled, ProtocolFeature, ProtocolVersion,
@@ -353,11 +355,8 @@ pub(crate) fn try_refund_allowance(
     Ok(())
 }
 
-pub(crate) fn action_transfer(
-    account: &mut Account,
-    transfer: &TransferAction,
-) -> Result<(), StorageError> {
-    account.set_amount(account.amount().checked_add(transfer.deposit).ok_or_else(|| {
+pub(crate) fn action_transfer(account: &mut Account, deposit: Balance) -> Result<(), StorageError> {
+    account.set_amount(account.amount().checked_add(deposit).ok_or_else(|| {
         StorageError::StorageInconsistentState("Account balance integer overflow".to_string())
     })?);
     Ok(())
@@ -414,7 +413,7 @@ pub(crate) fn action_implicit_account_creation_transfer(
     account: &mut Option<Account>,
     actor_id: &mut AccountId,
     account_id: &AccountId,
-    transfer: &TransferAction,
+    deposit: Balance,
     block_height: BlockHeight,
     current_protocol_version: ProtocolVersion,
 ) {
@@ -443,7 +442,7 @@ pub(crate) fn action_implicit_account_creation_transfer(
         .expect("we should be able to deserialize ED25519 public key");
 
     *account = Some(Account::new(
-        transfer.deposit,
+        deposit,
         0,
         CryptoHash::default(),
         fee_config.storage_usage_config.num_bytes_account
@@ -616,10 +615,11 @@ pub(crate) fn action_add_key(
 }
 
 pub(crate) fn apply_delegate_action(
+    state_update: &mut TrieUpdate,
     apply_state: &ApplyState,
-    receipt: &Receipt,
     action_receipt: &ActionReceipt,
-    predecessor_id: &AccountId,
+    receiver: &mut Option<Account>,
+    receiver_id: &AccountId,
     signed_delegate_action: &SignedDelegateAction,
     result: &mut ActionResult,
 ) -> Result<(), RuntimeError> {
@@ -628,30 +628,31 @@ pub(crate) fn apply_delegate_action(
             let delegate_action = &signed_delegate_action.delegate_action;
             let new_receipt = Receipt::new_delegate_actions(
                 &action_receipt.signer_id,
-                predecessor_id,
+                receiver_id,
                 &delegate_action.receiver_id,
                 &actions,
                 &delegate_action.public_key,
                 action_receipt.gas_price,
             );
 
-            let required_gas = receipt_required_gas(apply_state, &new_receipt)?;
+            let required_deposit = receipt_required_deposit(&new_receipt)?;
+            let refund_deposit =
+                signed_delegate_action.deposit.checked_sub(required_deposit).unwrap(); // TODO err
+            if refund_deposit != 0 {
+                create_implicit_account_or_transfer(
+                    state_update,
+                    apply_state,
+                    receiver,
+                    receiver_id,
+                    refund_deposit,
+                )?;
+            } else if receiver.is_none() {
+                todo!(); // Err
+            }
 
+            let required_gas = receipt_required_gas(apply_state, &new_receipt)?;
             result.gas_used += required_gas;
             result.new_receipts.push(new_receipt);
-
-            let required_deposit = receipt_required_deposit(&receipt)?;
-            if let Some(refund_deposit) =
-                signed_delegate_action.deposit.checked_sub(required_deposit)
-            {
-                if refund_deposit > 0 {
-                    let refund_receipt =
-                        Receipt::new_balance_refund(&receipt.predecessor_id, refund_deposit);
-                    result.new_receipts.push(refund_receipt);
-                }
-            } else {
-                todo!();
-            }
         }
         Err(_) => todo!(),
     }
@@ -678,11 +679,38 @@ fn receipt_required_gas(apply_state: &ApplyState, receipt: &Receipt) -> Result<G
     })
 }
 
-fn receipt_required_deposit(receipt: &Receipt) -> Result<u128, RuntimeError> {
+fn receipt_required_deposit(receipt: &Receipt) -> Result<Balance, RuntimeError> {
     Ok(match &receipt.receipt {
         ReceiptEnum::Action(action_receipt) => total_deposit(&action_receipt.actions)?,
         ReceiptEnum::Data(_) => 0,
     })
+}
+
+fn create_implicit_account_or_transfer(
+    state_update: &mut TrieUpdate,
+    apply_state: &ApplyState,
+    account: &mut Option<Account>,
+    account_id: &AccountId,
+    deposit: Balance,
+) -> Result<(), RuntimeError> {
+    if let Some(account) = account.as_mut() {
+        action_transfer(account, deposit)?;
+    } else {
+        // Implicit account creation
+        let mut actor_id = account_id.clone();
+        debug_assert!(is_implicit_account_creation_enabled(apply_state.current_protocol_version));
+        action_implicit_account_creation_transfer(
+            state_update,
+            &apply_state.config.transaction_costs,
+            account,
+            &mut actor_id,
+            account_id,
+            deposit,
+            apply_state.block_index,
+            apply_state.current_protocol_version,
+        );
+    }
+    Ok(())
 }
 
 pub(crate) fn check_actor_permissions(
