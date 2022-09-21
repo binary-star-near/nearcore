@@ -618,8 +618,8 @@ pub(crate) fn apply_delegate_action(
     state_update: &mut TrieUpdate,
     apply_state: &ApplyState,
     action_receipt: &ActionReceipt,
-    receiver: &mut Option<Account>,
-    receiver_id: &AccountId,
+    sender: &mut Option<Account>,
+    sender_id: &AccountId,
     signed_delegate_action: &SignedDelegateAction,
     result: &mut ActionResult,
 ) -> Result<(), RuntimeError> {
@@ -628,7 +628,7 @@ pub(crate) fn apply_delegate_action(
             let delegate_action = &signed_delegate_action.delegate_action;
             let new_receipt = Receipt::new_delegate_actions(
                 &action_receipt.signer_id,
-                receiver_id,
+                sender_id,
                 &delegate_action.receiver_id,
                 &actions,
                 &delegate_action.public_key,
@@ -638,15 +638,15 @@ pub(crate) fn apply_delegate_action(
             let required_deposit = receipt_required_deposit(&new_receipt)?;
             let refund_deposit =
                 signed_delegate_action.deposit.checked_sub(required_deposit).unwrap(); // TODO err
-            if refund_deposit != 0 {
+            if refund_deposit > 0 {
                 create_implicit_account_or_transfer(
                     state_update,
                     apply_state,
-                    receiver,
-                    receiver_id,
+                    sender,
+                    sender_id,
                     refund_deposit,
                 )?;
-            } else if receiver.is_none() {
+            } else if sender.is_none() && sender_id.is_implicit() {
                 todo!(); // Err
             }
 

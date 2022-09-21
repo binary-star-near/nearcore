@@ -1,5 +1,6 @@
 use near_crypto::key_conversion::is_valid_staking_key;
 use near_crypto::PublicKey;
+use near_primitives::account::AccessKey;
 use near_primitives::runtime::get_insufficient_storage_stake;
 use near_primitives::transaction::Transaction;
 use near_primitives::{
@@ -181,24 +182,41 @@ pub fn verify_and_charge_transaction(
         }
     };
 
+    validate_function_call_permissions(
+        &transaction.receiver_id,
+        &transaction.actions,
+        &access_key,
+    )?;
+
+    set_access_key(state_update, signer_id.clone(), transaction.public_key.clone(), &access_key);
+    set_account(state_update, signer_id.clone(), &signer);
+
+    Ok(VerificationResult { gas_burnt, gas_remaining, receipt_gas_price, burnt_amount })
+}
+
+fn validate_function_call_permissions(
+    receiver_id: &AccountId,
+    actions: &[Action],
+    access_key: &AccessKey,
+) -> Result<(), RuntimeError> {
     if let AccessKeyPermission::FunctionCall(ref function_call_permission) = access_key.permission {
-        if transaction.actions.len() != 1 {
+        if actions.len() != 1 {
             return Err(InvalidTxError::InvalidAccessKeyError(
                 InvalidAccessKeyError::RequiresFullAccess,
             )
             .into());
         }
-        if let Some(Action::FunctionCall(ref function_call)) = transaction.actions.get(0) {
+        if let Some(Action::FunctionCall(ref function_call)) = actions.get(0) {
             if function_call.deposit > 0 {
                 return Err(InvalidTxError::InvalidAccessKeyError(
                     InvalidAccessKeyError::DepositWithFunctionCall,
                 )
                 .into());
             }
-            if transaction.receiver_id.as_ref() != function_call_permission.receiver_id {
+            if receiver_id.as_ref() != function_call_permission.receiver_id {
                 return Err(InvalidTxError::InvalidAccessKeyError(
                     InvalidAccessKeyError::ReceiverMismatch {
-                        tx_receiver: transaction.receiver_id.clone(),
+                        tx_receiver: receiver_id.clone(),
                         ak_receiver: function_call_permission.receiver_id.clone(),
                     },
                 )
@@ -223,12 +241,9 @@ pub fn verify_and_charge_transaction(
             )
             .into());
         }
-    };
+    }
 
-    set_access_key(state_update, signer_id.clone(), transaction.public_key.clone(), &access_key);
-    set_account(state_update, signer_id.clone(), &signer);
-
-    Ok(VerificationResult { gas_burnt, gas_remaining, receipt_gas_price, burnt_amount })
+    Ok(())
 }
 
 /// Validates a given receipt. Checks validity of the Action or Data receipt.
@@ -358,15 +373,24 @@ fn verify_delegate_action(
                 // There should be only one DelegateAction
                 found_delegate_action = true;
 
-                let delegate_action = &signed_delegate_action.delegate_action;
-                let hash = delegate_action.get_hash();
-                let public_key = &delegate_action.public_key;
-                if !signed_delegate_action.signature.verify(hash.as_ref(), public_key) {
+                if !signed_delegate_action.verify() {
                     return Err(InvalidTxError::InvalidSignature)
                         .map_err(RuntimeError::InvalidTxError);
                 }
 
-                let actions = delegate_action.get_actions().unwrap();
+                let delegate_action = &signed_delegate_action.delegate_action;
+                let actions = delegate_action.get_actions().unwrap(); // TODO: Err
+
+                validate_delegate_access_key(
+                    state_update,
+                    &transaction.receiver_id,
+                    &delegate_action.receiver_id,
+                    &actions,
+                    &delegate_action.public_key,
+                    delegate_action.nonce,
+                    block_height,
+                    current_protocol_version,
+                )?;
                 validate_actions(limit_config, &actions)
                     .map_err(InvalidTxError::ActionsValidation)?;
 
@@ -379,15 +403,6 @@ fn verify_delegate_action(
                     .map_err(InvalidTxError::ActionsValidation)
                     .map_err(RuntimeError::InvalidTxError);
                 }
-
-                validate_access_key(
-                    state_update,
-                    &transaction.receiver_id,
-                    &delegate_action.public_key,
-                    delegate_action.nonce,
-                    block_height,
-                    current_protocol_version,
-                )?;
             } else {
                 return Err(ActionsValidationError::TotalNumberOfActionsExceeded {
                     total_number_of_actions: transaction.actions.len() as u64,
@@ -402,26 +417,35 @@ fn verify_delegate_action(
     Ok(())
 }
 
-pub fn validate_access_key(
+pub fn validate_delegate_access_key(
     state_update: &mut TrieUpdate,
-    signer_id: &AccountId,
+    account_id: &AccountId,
+    receiver_id: &AccountId,
+    actions: &[Action],
     public_key: &PublicKey,
     nonce: u64,
     #[allow(unused)] block_height: Option<BlockHeight>,
     current_protocol_version: ProtocolVersion,
 ) -> Result<(), RuntimeError> {
-    match get_account(state_update, signer_id)? {
-        Some(signer) => signer,
+    match get_account(state_update, account_id)? {
+        Some(account) => account,
         None => {
-            return Err(InvalidTxError::SignerDoesNotExist { signer_id: signer_id.clone() }.into());
+            if account_id.is_implicit() {
+                if let Ok(public_key_data) = hex::decode(account_id.as_ref().as_bytes()) {
+                    if public_key.key_data().eq(&public_key_data) {
+                        return Ok(());
+                    }
+                }
+            }
+            return Err(InvalidTxError::SignerDoesNotExist { signer_id: account_id.clone() }.into());
         }
     };
-    let mut access_key = match get_access_key(state_update, signer_id, public_key)? {
+    let mut access_key = match get_access_key(state_update, account_id, public_key)? {
         Some(access_key) => access_key,
         None => {
             return Err(InvalidTxError::InvalidAccessKeyError(
                 InvalidAccessKeyError::AccessKeyNotFound {
-                    account_id: signer_id.clone(),
+                    account_id: account_id.clone(),
                     public_key: public_key.clone(),
                 },
             )
@@ -446,7 +470,9 @@ pub fn validate_access_key(
 
     access_key.nonce = nonce;
 
-    set_access_key(state_update, signer_id.clone(), public_key.clone(), &access_key);
+    validate_function_call_permissions(receiver_id, actions, &access_key)?;
+
+    set_access_key(state_update, account_id.clone(), public_key.clone(), &access_key);
     Ok(())
 }
 

@@ -255,8 +255,12 @@ pub struct SignedDelegateAction {
 }
 
 impl SignedDelegateAction {
-    pub fn get_hash(&self) -> CryptoHash {
-        self.delegate_action.get_hash()
+    pub fn verify(&self) -> bool {
+        let delegate_action = &self.delegate_action;
+        let hash = delegate_action.get_hash();
+        let public_key = &delegate_action.public_key;
+
+        self.signature.verify(hash.as_ref(), public_key)
     }
 }
 
