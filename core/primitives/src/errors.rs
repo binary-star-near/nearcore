@@ -140,6 +140,10 @@ pub enum InvalidTxError {
     ActionsValidation(ActionsValidationError),
     /// The size of serialized transaction exceeded the limit.
     TransactionSizeExceeded { size: u64, limit: u64 },
+    /// Can't deserialize actions are contained in DelegateAction
+    DelegateActionDeserializationError,
+    /// DelegateAction signature is not valid
+    DelegateActionInvalideSignature,
 }
 
 impl std::error::Error for InvalidTxError {}
@@ -200,6 +204,10 @@ pub enum ActionsValidationError {
     UnsuitableStakingKey { public_key: PublicKey },
     /// The attached amount of gas in a FunctionCall action has to be a positive number.
     FunctionCallZeroAttachedGas,
+    /// DelegateAction shouldn't contain the nested one
+    NestedDelegateActionError,
+    /// There should be only one DelegateAction
+    DelegateActionMustBeOne,
 }
 
 /// Describes the error for validating a receipt.
@@ -317,6 +325,8 @@ impl Display for ActionsValidationError {
                 f,
                 "The attached amount of gas in a FunctionCall action has to be a positive number",
             ),
+            ActionsValidationError::NestedDelegateActionError => write!(f, "DelegateAction shouldn't contain the nested one"),
+            ActionsValidationError::DelegateActionMustBeOne => write!(f, "There should be only one DelegateAction"),
         }
     }
 }
@@ -441,6 +451,12 @@ pub enum ActionErrorKind {
     OnlyImplicitAccountCreationAllowed { account_id: AccountId },
     /// Delete account whose state is large is temporarily banned.
     DeleteAccountWithLargeState { account_id: AccountId },
+    /// Can't deserialize actions are contained in DelegateAction
+    DelegateActionDeserializationError,
+    /// The attached deposit is not enough to cover all contained actions
+    DelegateActionNotEnoughDeposit { required_deposit: Balance },
+    /// The attached gas is not enough to cover all contained actions
+    DelegateActionNotEnoughGas { required_gas: Gas },
 }
 
 impl From<ActionErrorKind> for ActionError {
@@ -501,6 +517,12 @@ impl Display for InvalidTxError {
             }
             InvalidTxError::TransactionSizeExceeded { size, limit } => {
                 write!(f, "Size of serialized transaction {} exceeded the limit {}", size, limit)
+            }
+            InvalidTxError::DelegateActionDeserializationError => {
+                write!(f, "Can't deserialze actions")
+            }
+            InvalidTxError::DelegateActionInvalideSignature => {
+                write!(f, "DelegateAction is not signed with the given public key")
             }
         }
     }
@@ -751,6 +773,9 @@ impl Display for ActionErrorKind {
             ActionErrorKind::InsufficientStake { account_id, stake, minimum_stake } => write!(f, "Account {} tries to stake {} but minimum required stake is {}", account_id, stake, minimum_stake),
             ActionErrorKind::OnlyImplicitAccountCreationAllowed { account_id } => write!(f, "CreateAccount action is called on hex-characters account of length 64 {}", account_id),
             ActionErrorKind::DeleteAccountWithLargeState { account_id } => write!(f, "The state of account {} is too large and therefore cannot be deleted", account_id),
+            ActionErrorKind::DelegateActionDeserializationError => write!(f, "Can't deserialze actions"),
+            ActionErrorKind::DelegateActionNotEnoughDeposit { required_deposit } => write!(f, "DelegateAction requires at least {} yoctoNEAR to be attached", required_deposit),
+            ActionErrorKind::DelegateActionNotEnoughGas { required_gas } => write!(f, "DelegateAction requires at least {} yoctoNEAR to be attached", required_gas),
         }
     }
 }

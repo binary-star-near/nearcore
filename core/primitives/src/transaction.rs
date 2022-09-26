@@ -1,7 +1,6 @@
 use std::borrow::Borrow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::io::Error;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -9,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use near_crypto::{PublicKey, Signature};
 
 use crate::account::AccessKey;
-use crate::errors::TxExecutionError;
+use crate::errors::{InvalidTxError, TxExecutionError};
 use crate::hash::{hash, CryptoHash};
 use crate::logging;
 use crate::merkle::MerklePath;
@@ -271,9 +270,11 @@ impl From<SignedDelegateAction> for Action {
 }
 
 impl DelegateAction {
-    pub fn get_actions(&self) -> Result<Vec<Action>, Error> {
-        let a = ActionArraySerde::try_from_slice(&self.action_array_serde)?;
-        Ok(a.actions)
+    pub fn get_actions(&self) -> Result<Vec<Action>, InvalidTxError> {
+        match ActionArraySerde::try_from_slice(&self.action_array_serde) {
+            Ok(a) => Ok(a.actions),
+            Err(_) => Err(InvalidTxError::DelegateActionDeserializationError),
+        }
     }
 
     pub fn get_hash(&self) -> CryptoHash {

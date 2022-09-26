@@ -374,12 +374,11 @@ fn verify_delegate_action(
                 found_delegate_action = true;
 
                 if !signed_delegate_action.verify() {
-                    return Err(InvalidTxError::InvalidSignature)
-                        .map_err(RuntimeError::InvalidTxError);
+                    return Err(InvalidTxError::DelegateActionInvalideSignature.into());
                 }
 
                 let delegate_action = &signed_delegate_action.delegate_action;
-                let actions = delegate_action.get_actions().unwrap(); // TODO: Err
+                let actions = delegate_action.get_actions()?;
 
                 validate_delegate_access_key(
                     state_update,
@@ -394,22 +393,15 @@ fn verify_delegate_action(
                 validate_actions(limit_config, &actions)
                     .map_err(InvalidTxError::ActionsValidation)?;
 
-                // DelegateAction shouldn't contain a nested DelegateAction
                 if actions.iter().any(|a| matches!(a, Action::Delegate(_))) {
-                    return Err(ActionsValidationError::TotalNumberOfActionsExceeded {
-                        total_number_of_actions: transaction.actions.len() as u64,
-                        limit: 0,
-                    })
-                    .map_err(InvalidTxError::ActionsValidation)
-                    .map_err(RuntimeError::InvalidTxError);
+                    return Err(ActionsValidationError::NestedDelegateActionError)
+                        .map_err(InvalidTxError::ActionsValidation)
+                        .map_err(RuntimeError::InvalidTxError);
                 }
             } else {
-                return Err(ActionsValidationError::TotalNumberOfActionsExceeded {
-                    total_number_of_actions: transaction.actions.len() as u64,
-                    limit: 1,
-                })
-                .map_err(InvalidTxError::ActionsValidation)
-                .map_err(RuntimeError::InvalidTxError);
+                return Err(ActionsValidationError::DelegateActionMustBeOne)
+                    .map_err(InvalidTxError::ActionsValidation)
+                    .map_err(RuntimeError::InvalidTxError);
             }
         }
     }

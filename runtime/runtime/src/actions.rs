@@ -636,25 +636,35 @@ pub(crate) fn apply_delegate_action(
             );
 
             let required_deposit = receipt_required_deposit(&new_receipt)?;
-            let refund_deposit =
-                signed_delegate_action.deposit.checked_sub(required_deposit).unwrap(); // TODO err
-            if refund_deposit > 0 {
-                create_implicit_account_or_transfer(
-                    state_update,
-                    apply_state,
-                    sender,
-                    sender_id,
-                    refund_deposit,
-                )?;
-            } else if sender.is_none() && sender_id.is_implicit() {
-                todo!(); // Err
-            }
+            if let Some(refund_deposit) =
+                signed_delegate_action.deposit.checked_sub(required_deposit)
+            {
+                if refund_deposit > 0 {
+                    create_implicit_account_or_transfer(
+                        state_update,
+                        apply_state,
+                        sender,
+                        sender_id,
+                        refund_deposit,
+                    )?;
+                } else if sender.is_none() && sender_id.is_implicit() {
+                    todo!(); // Err
+                }
 
-            let required_gas = receipt_required_gas(apply_state, &new_receipt)?;
-            result.gas_used += required_gas;
-            result.new_receipts.push(new_receipt);
+                let required_gas = receipt_required_gas(apply_state, &new_receipt)?;
+                if required_gas <= signed_delegate_action.gas {
+                    result.gas_used += required_gas;
+                    result.new_receipts.push(new_receipt);
+                } else {
+                    result.result =
+                        Err(ActionErrorKind::DelegateActionNotEnoughGas { required_gas }.into())
+                }
+            } else {
+                result.result =
+                    Err(ActionErrorKind::DelegateActionNotEnoughDeposit { required_deposit }.into())
+            }
         }
-        Err(_) => todo!(),
+        Err(_) => result.result = Err(ActionErrorKind::DelegateActionDeserializationError.into()),
     }
 
     Ok(())
