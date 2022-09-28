@@ -125,6 +125,7 @@ impl ParameterTable {
                 },
                 "delete_key_cost": self.fee_json(FeeParameter::ActionDeleteKey),
                 "delete_account_cost": self.fee_json(FeeParameter::ActionDeleteAccount),
+                "delegate_cost": self.fee_json(FeeParameter::ActionDelegate),
             },
             "storage_usage_config": {
                 "num_bytes_account": self.get(Parameter::StorageNumBytesAccount),
@@ -314,11 +315,11 @@ registrar_account_id: registrar
 # Comment line
 min_allowed_top_level_account_length: 32
 
-# Comment line with trailing whitespace # 
+# Comment line with trailing whitespace #
 
 storage_amount_per_byte: 100000000000000000000
 storage_num_bytes_account: 100
-storage_num_extra_bytes_record   :   40  
+storage_num_extra_bytes_record   :   40
 
 "#;
 
